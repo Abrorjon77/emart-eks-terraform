@@ -1,0 +1,36 @@
+# Backend config — contains S3 bucket name
+backend.tf
+
+# Terraform state — contains sensitive resource IDs and secrets
+*.tfstate
+*.tfstate.backup
+*.tfstate.lock.info
+
+# Terraform working directory
+.terraform/
+.terraform.lock.hcl
+
+# Variable files that may contain secrets
+*.tfvars
+*.tfvars.json
+
+# Crash logs
+crash.log
+crash.*.log
+
+# Override files
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraform/
+terraform.tfstate
+terraform.tfstate.backup
+*.tfvars
+# Saved plans and old local state
+tfplan
+*.tfplan
+.old-state-backup/
+
+# macOS folder metadata
+.DS_Store
