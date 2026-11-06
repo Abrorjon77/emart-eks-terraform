@@ -207,7 +207,7 @@ ip-10-0-x-x.ec2.internal      Ready    <none>   2m    v1.36.x
 
 ## What gets created
 
-- VPC (`10.0.0.0/16`) with 1 public subnet (`10.0.0.0/24`) and 1 private subnet (`10.0.10.0/24`) in different availability zones
+- VPC (`10.0.0.0/16`) with 2 public subnets (`10.0.0.0/24`, `10.0.1.0/24`) and 1 private subnet (`10.0.10.0/24`). Load balancers use the public subnets; worker nodes run only in the private one. The second public subnet shares the private subnet's AZ, because a load balancer can only reach nodes in AZs where it has a subnet.
 - NAT gateway in the public subnet so worker nodes in the private subnet can reach the internet
 - Internet Gateway and route tables
 - EKS control plane (Kubernetes 1.36)
