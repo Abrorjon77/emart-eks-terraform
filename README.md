@@ -215,14 +215,22 @@ ip-10-0-x-x.ec2.internal      Ready    <none>   2m    v1.36.x
 - IAM roles for the cluster and nodes
 - OIDC provider (enables pods to assume IAM roles)
 - EBS CSI Driver addon (enables Kubernetes persistent volumes on EBS)
+- AWS Load Balancer Controller (Helm chart in `kube-system`, IAM role via IRSA). It turns Kubernetes `Ingress` resources into ALBs. The IAM policy is the official one, kept in [policies/aws-load-balancer-controller.json](policies/aws-load-balancer-controller.json); when you bump `alb_controller_chart_version`, update the policy from the same release.
 
 ---
 
 ## Destroy the cluster
 
-Tears down all resources and stops all billing:
+The ALB is created by the controller, not by Terraform, so delete the app first. Otherwise the ALB is left behind, keeps billing, and blocks deleting the VPC:
 
 ```bash
+# 1. Delete the app; the Argo CD finalizer also deletes its Ingress, so the controller removes the ALB
+kubectl delete -f ~/emart-k8s-config/argocd/application.yaml
+
+# 2. Wait until no ALB is left
+aws elbv2 describe-load-balancers --region us-east-1 --query 'LoadBalancers[].LoadBalancerName'
+
+# 3. Tear down everything else
 terraform destroy
 ```
 
@@ -239,7 +247,8 @@ This does not delete the S3 state bucket, which belongs to `bootstrap/` and has 
 | EKS control plane | $0.10 / hr |
 | t3.large-class node (×1) | ~$0.03 / hr Spot, $0.0832 / hr on-demand |
 | NAT gateway | $0.045 / hr + $0.045 / GB processed |
-| **Total** | **~$0.18 / hr (~$130 / month) with Spot, ~$0.23 / hr on-demand** |
+| ALB (created when the app is deployed) | ~$0.0225 / hr + LCU usage, plus ~$0.01 / hr for its 2 public IPs |
+| **Total** | **~$0.21 / hr (~$155 / month) with Spot and the app deployed** |
 
 ---
 

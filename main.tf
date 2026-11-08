@@ -8,12 +8,29 @@ terraform {
       source  = "hashicorp/tls"
       version = "~> 4.0"
     }
+    helm = {
+      source  = "hashicorp/helm"
+      version = "~> 3.0"
+    }
   }
   required_version = ">= 1.10.0"
 }
 
 provider "aws" {
   region = var.region
+}
+
+# Helm talks to the new cluster using a short-lived token from your AWS credentials
+provider "helm" {
+  kubernetes = {
+    host                   = aws_eks_cluster.main.endpoint
+    cluster_ca_certificate = base64decode(aws_eks_cluster.main.certificate_authority[0].data)
+    exec = {
+      api_version = "client.authentication.k8s.io/v1beta1"
+      command     = "aws"
+      args        = ["eks", "get-token", "--cluster-name", aws_eks_cluster.main.name, "--region", var.region]
+    }
+  }
 }
 
 data "aws_availability_zones" "available" {}

@@ -38,3 +38,8 @@ variable "max_nodes" {
   description = "Maximum number of worker nodes"
   default     = 2
 }
+
+variable "alb_controller_chart_version" {
+  description = "Helm chart version of the AWS Load Balancer Controller (eks-charts)"
+  default     = "3.6.2"
+}
