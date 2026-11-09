@@ -28,11 +28,12 @@ aws configure
 Run these in order. Each step depends on the one before it.
 
 ```bash
-# 1. Create the state bucket (bootstrap keeps its own state locally)
+# 1. Create the state bucket, DNS zone and certificate (bootstrap keeps its own state locally)
 cd bootstrap
 terraform init
-terraform plan          # 4 to add: bucket, versioning, encryption, public access block
+terraform plan          # 8 to add: bucket + 3 settings, hosted zone, certificate, 2 validation records
 terraform apply         # type "yes"
+terraform output name_servers   # paste these 4 into GoDaddy, see "Step 1b"
 cd ..
 
 # 2. Point the main config at the bucket
@@ -94,6 +95,26 @@ cd ..
 ```
 
 The bucket has `prevent_destroy` set, so `terraform destroy` in `bootstrap/` will refuse to delete it. Keep `bootstrap/terraform.tfstate` safe; it is gitignored.
+
+---
+
+## Step 1b — Point the GoDaddy domain at Route 53 (once)
+
+`bootstrap/` also creates the Route 53 hosted zone for `registan.xyz` (change `domain_name` in `bootstrap/variables.tf` and `variables.tf` for another domain) and a free ACM certificate for `registan.xyz` and `*.registan.xyz`. Both are kept between cluster rebuilds, so the nameservers never change.
+
+1. Get the zone's nameservers:
+   ```bash
+   cd bootstrap && terraform output name_servers && cd ..
+   ```
+2. In GoDaddy: **My Products → registan.xyz → DNS → Nameservers → Change nameservers → I'll use my own nameservers**. Enter the 4 values (without the trailing dot) and save.
+3. Wait for the change to spread (minutes to a few hours), then check:
+   ```bash
+   dig +short NS registan.xyz          # should list the same 4 nameservers
+   aws acm list-certificates --region us-east-1 \
+     --query "CertificateSummaryList[?DomainName=='registan.xyz'].Status"   # should become ISSUED
+   ```
+
+The domain stays registered at GoDaddy; only its DNS is served by Route 53 ($0.50/month). Deploy the app only after the certificate is `ISSUED`, because the ALB's HTTPS listener needs it.
 
 ---
 
@@ -216,6 +237,7 @@ ip-10-0-x-x.ec2.internal      Ready    <none>   2m    v1.36.x
 - OIDC provider (enables pods to assume IAM roles)
 - EBS CSI Driver addon (enables Kubernetes persistent volumes on EBS)
 - AWS Load Balancer Controller (Helm chart in `kube-system`, IAM role via IRSA). It turns Kubernetes `Ingress` resources into ALBs. The IAM policy is the official one, kept in [policies/aws-load-balancer-controller.json](policies/aws-load-balancer-controller.json); when you bump `alb_controller_chart_version`, update the policy from the same release.
+- ExternalDNS (Helm chart in `kube-system`, IAM role via IRSA, limited to the `registan.xyz` zone). It reads the hostnames on the Ingress and keeps the Route 53 records pointing at the current ALB, so a rebuild needs no DNS changes. With `policy=sync` it also deletes those records when the app is deleted.
 
 ---
 
@@ -247,6 +269,7 @@ This does not delete the S3 state bucket, which belongs to `bootstrap/` and has 
 | EKS control plane | $0.10 / hr |
 | t3.large-class node (×1) | ~$0.03 / hr Spot, $0.0832 / hr on-demand |
 | NAT gateway | $0.045 / hr + $0.045 / GB processed |
+| Route 53 hosted zone (kept between rebuilds) | $0.50 / month |
 | ALB (created when the app is deployed) | ~$0.0225 / hr + LCU usage, plus ~$0.01 / hr for its 2 public IPs |
 | **Total** | **~$0.21 / hr (~$155 / month) with Spot and the app deployed** |
 

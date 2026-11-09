@@ -43,3 +43,13 @@ variable "alb_controller_chart_version" {
   description = "Helm chart version of the AWS Load Balancer Controller (eks-charts)"
   default     = "3.6.2"
 }
+
+variable "domain_name" {
+  description = "App domain; its Route 53 zone is created in bootstrap/"
+  default     = "registan.xyz"
+}
+
+variable "external_dns_chart_version" {
+  description = "Helm chart version of ExternalDNS (kubernetes-sigs)"
+  default     = "1.23.0"
+}
