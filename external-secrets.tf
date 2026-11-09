@@ -1,10 +1,9 @@
 # External Secrets Operator: copies secrets from AWS Secrets Manager into
-# Kubernetes Secrets. The app's Helm chart has the SecretStore and ExternalSecret
-# that ask for emart/mysql. The secret itself is created in bootstrap/.
+# Kubernetes Secrets. The Helm charts in emart-k8s-config have the SecretStore
+# and ExternalSecret resources that ask for emart/mysql and emart/grafana.
+# The secrets themselves are created in bootstrap/.
 
-data "aws_secretsmanager_secret" "mysql" {
-  name = "emart/mysql"
-}
+data "aws_caller_identity" "current" {}
 
 data "aws_iam_policy_document" "external_secrets" {
   statement {
@@ -13,7 +12,8 @@ data "aws_iam_policy_document" "external_secrets" {
       "secretsmanager:GetSecretValue",
       "secretsmanager:DescribeSecret",
     ]
-    resources = [data.aws_secretsmanager_secret.mysql.arn]
+    # Only secrets whose name starts with "emart/"
+    resources = ["arn:aws:secretsmanager:${var.region}:${data.aws_caller_identity.current.account_id}:secret:emart/*"]
   }
 }
 

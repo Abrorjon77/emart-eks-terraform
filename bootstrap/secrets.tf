@@ -19,3 +19,19 @@ resource "aws_secretsmanager_secret_version" "mysql" {
   # whenever you change mysql_password in terraform.tfvars
   secret_string_wo_version = 1
 }
+
+# Grafana admin login, used by the monitoring stack in emart-k8s-config
+resource "aws_secretsmanager_secret" "grafana" {
+  name        = "emart/grafana"
+  description = "Grafana admin login for grafana.registan.xyz"
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+resource "aws_secretsmanager_secret_version" "grafana" {
+  secret_id                = aws_secretsmanager_secret.grafana.id
+  secret_string_wo         = jsonencode({ username = "admin", password = var.grafana_admin_password })
+  secret_string_wo_version = 1
+}

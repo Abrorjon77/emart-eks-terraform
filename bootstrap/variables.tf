@@ -19,3 +19,10 @@ variable "mysql_password" {
   sensitive   = true
   ephemeral   = true # never written to plan or state files
 }
+
+variable "grafana_admin_password" {
+  description = "Grafana admin password; set it in terraform.tfvars (gitignored)"
+  type        = string
+  sensitive   = true
+  ephemeral   = true
+}

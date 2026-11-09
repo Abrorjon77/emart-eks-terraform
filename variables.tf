@@ -26,7 +26,7 @@ variable "capacity_type" {
 
 variable "desired_nodes" {
   description = "Desired number of worker nodes"
-  default     = 1
+  default     = 2
 }
 
 variable "min_nodes" {

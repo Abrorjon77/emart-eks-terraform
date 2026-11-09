@@ -31,10 +31,11 @@ Run these in order. Each step depends on the one before it.
 # 1. Create the state bucket, DNS zone, certificate and MySQL secret (bootstrap keeps its own state locally)
 cd bootstrap
 cat > terraform.tfvars <<'EOF'      # gitignored; the password never goes into a .tf file
-mysql_password = "<your-mysql-password>"
+mysql_password         = "<your-mysql-password>"
+grafana_admin_password = "<a-long-random-password>"
 EOF
 terraform init
-terraform plan          # 10 to add: bucket + 3 settings, hosted zone, certificate, 2 validation records, secret + its value
+terraform plan          # 12 to add: bucket + 3 settings, hosted zone, certificate, 2 validation records, 2 secrets + their values
 terraform apply         # type "yes"
 terraform output name_servers   # paste these 4 into GoDaddy, see "Step 1b"
 cd ..
@@ -235,13 +236,13 @@ ip-10-0-x-x.ec2.internal      Ready    <none>   2m    v1.36.x
 - NAT gateway in the public subnet so worker nodes in the private subnet can reach the internet
 - Internet Gateway and route tables
 - EKS control plane (Kubernetes 1.36)
-- Managed node group — 1× Spot worker node (t3.large class) in the private subnet, scales to 2
+- Managed node group — 2× Spot worker nodes (t3.large class) in the private subnet (2 so the monitoring stack fits)
 - IAM roles for the cluster and nodes
 - OIDC provider (enables pods to assume IAM roles)
 - EBS CSI Driver addon (enables Kubernetes persistent volumes on EBS)
 - AWS Load Balancer Controller (Helm chart in `kube-system`, IAM role via IRSA). It turns Kubernetes `Ingress` resources into ALBs. The IAM policy is the official one, kept in [policies/aws-load-balancer-controller.json](policies/aws-load-balancer-controller.json); when you bump `alb_controller_chart_version`, update the policy from the same release.
 - ExternalDNS (Helm chart in `kube-system`, IAM role via IRSA, limited to the `registan.xyz` zone). It reads the hostnames on the Ingress and keeps the Route 53 records pointing at the current ALB, so a rebuild needs no DNS changes. With `policy=sync` it also deletes those records when the app is deleted.
-- External Secrets Operator (Helm chart in `external-secrets`, IAM role via IRSA that can only read `emart/mysql`). The app's Helm chart asks it for `emart/mysql`, and it creates the `mysql-secret` Kubernetes Secret, so there is no `kubectl create secret` step.
+- External Secrets Operator (Helm chart in `external-secrets`, IAM role via IRSA that can only read secrets named `emart/*`). The app's Helm chart asks it for `emart/mysql` (creates `mysql-secret`), and the monitoring stack asks for `emart/grafana` (creates `grafana-admin`), so there is no `kubectl create secret` step.
 
 ### The MySQL password
 
@@ -258,8 +259,10 @@ The password is stored in AWS Secrets Manager as `emart/mysql`, created by `boot
 The ALB is created by the controller, not by Terraform, so delete the app first. Otherwise the ALB is left behind, keeps billing, and blocks deleting the VPC:
 
 ```bash
-# 1. Delete the app; the Argo CD finalizer also deletes its Ingress, so the controller removes the ALB
+# 1. Delete the app and the monitoring stack; the Argo CD finalizer also deletes their
+#    Ingresses, so the controller removes the shared ALB (it stays while either Ingress exists)
 kubectl delete -f ~/emart-k8s-config/argocd/application.yaml
+kubectl delete -f ~/emart-k8s-config/argocd/monitoring/
 
 # 2. Wait until no ALB is left
 aws elbv2 describe-load-balancers --region us-east-1 --query 'LoadBalancers[].LoadBalancerName'
@@ -282,7 +285,7 @@ This does not delete the S3 state bucket, which belongs to `bootstrap/` and has 
 | t3.large-class node (×1) | ~$0.03 / hr Spot, $0.0832 / hr on-demand |
 | NAT gateway | $0.045 / hr + $0.045 / GB processed |
 | Route 53 hosted zone (kept between rebuilds) | $0.50 / month |
-| Secrets Manager secret `emart/mysql` (kept between rebuilds) | $0.40 / month |
+| Secrets Manager secrets `emart/mysql`, `emart/grafana` (kept between rebuilds) | $0.80 / month |
 | ALB (created when the app is deployed) | ~$0.0225 / hr + LCU usage, plus ~$0.01 / hr for its 2 public IPs |
 | **Total** | **~$0.21 / hr (~$155 / month) with Spot and the app deployed** |
 
