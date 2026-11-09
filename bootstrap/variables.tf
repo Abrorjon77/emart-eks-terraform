@@ -12,3 +12,10 @@ variable "domain_name" {
   description = "Domain registered at GoDaddy; its DNS is hosted in Route 53"
   default     = "registan.xyz"
 }
+
+variable "mysql_password" {
+  description = "MySQL root password; set it in terraform.tfvars (gitignored), never in a .tf file"
+  type        = string
+  sensitive   = true
+  ephemeral   = true # never written to plan or state files
+}

@@ -53,3 +53,8 @@ variable "external_dns_chart_version" {
   description = "Helm chart version of ExternalDNS (kubernetes-sigs)"
   default     = "1.23.0"
 }
+
+variable "external_secrets_chart_version" {
+  description = "Helm chart version of External Secrets Operator"
+  default     = "2.14.0"
+}

@@ -28,10 +28,13 @@ aws configure
 Run these in order. Each step depends on the one before it.
 
 ```bash
-# 1. Create the state bucket, DNS zone and certificate (bootstrap keeps its own state locally)
+# 1. Create the state bucket, DNS zone, certificate and MySQL secret (bootstrap keeps its own state locally)
 cd bootstrap
+cat > terraform.tfvars <<'EOF'      # gitignored; the password never goes into a .tf file
+mysql_password = "<your-mysql-password>"
+EOF
 terraform init
-terraform plan          # 8 to add: bucket + 3 settings, hosted zone, certificate, 2 validation records
+terraform plan          # 10 to add: bucket + 3 settings, hosted zone, certificate, 2 validation records, secret + its value
 terraform apply         # type "yes"
 terraform output name_servers   # paste these 4 into GoDaddy, see "Step 1b"
 cd ..
@@ -238,6 +241,15 @@ ip-10-0-x-x.ec2.internal      Ready    <none>   2m    v1.36.x
 - EBS CSI Driver addon (enables Kubernetes persistent volumes on EBS)
 - AWS Load Balancer Controller (Helm chart in `kube-system`, IAM role via IRSA). It turns Kubernetes `Ingress` resources into ALBs. The IAM policy is the official one, kept in [policies/aws-load-balancer-controller.json](policies/aws-load-balancer-controller.json); when you bump `alb_controller_chart_version`, update the policy from the same release.
 - ExternalDNS (Helm chart in `kube-system`, IAM role via IRSA, limited to the `registan.xyz` zone). It reads the hostnames on the Ingress and keeps the Route 53 records pointing at the current ALB, so a rebuild needs no DNS changes. With `policy=sync` it also deletes those records when the app is deleted.
+- External Secrets Operator (Helm chart in `external-secrets`, IAM role via IRSA that can only read `emart/mysql`). The app's Helm chart asks it for `emart/mysql`, and it creates the `mysql-secret` Kubernetes Secret, so there is no `kubectl create secret` step.
+
+### The MySQL password
+
+The password is stored in AWS Secrets Manager as `emart/mysql`, created by `bootstrap/` and kept between rebuilds ($0.40/month).
+
+- **Where you set it:** `bootstrap/terraform.tfvars` (gitignored). The variable is `sensitive` and `ephemeral`, and the secret uses a write-only argument, so the password is never written to `.tf` files, plan files or `terraform.tfstate`.
+- **Use the password the app expects.** The `javaapi` image connects with it, so a different value breaks the app.
+- **To change it:** edit `terraform.tfvars`, bump `secret_string_wo_version` in [bootstrap/secrets.tf](bootstrap/secrets.tf), run `terraform apply` in `bootstrap/`. External Secrets updates `mysql-secret` within an hour (`refreshInterval`). MySQL itself only reads it on first start, so changing the password of an existing database also needs an `ALTER USER` inside MySQL.
 
 ---
 
@@ -270,6 +282,7 @@ This does not delete the S3 state bucket, which belongs to `bootstrap/` and has 
 | t3.large-class node (×1) | ~$0.03 / hr Spot, $0.0832 / hr on-demand |
 | NAT gateway | $0.045 / hr + $0.045 / GB processed |
 | Route 53 hosted zone (kept between rebuilds) | $0.50 / month |
+| Secrets Manager secret `emart/mysql` (kept between rebuilds) | $0.40 / month |
 | ALB (created when the app is deployed) | ~$0.0225 / hr + LCU usage, plus ~$0.01 / hr for its 2 public IPs |
 | **Total** | **~$0.21 / hr (~$155 / month) with Spot and the app deployed** |
 
