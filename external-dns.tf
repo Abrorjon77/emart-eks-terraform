@@ -80,6 +80,10 @@ resource "helm_release" "external_dns" {
     { name = "policy", value = "sync" },
     # TXT ownership records mark which records this cluster manages
     { name = "txtOwnerId", value = var.cluster_name },
+    # Without a prefix the ownership record for the bare domain would be
+    # "a-registan.xyz", which is outside the zone, so ExternalDNS never owned
+    # registan.xyz and stopped updating it. This makes it "extdns-a.registan.xyz".
+    { name = "txtPrefix", value = "extdns-%%{record_type}." },
     { name = "env[0].name", value = "AWS_DEFAULT_REGION" },
     { name = "env[0].value", value = var.region },
     { name = "serviceAccount.create", value = "true" },
